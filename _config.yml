@@ -7,10 +7,10 @@
 
 # Site Settings
 locale                   : "en-US"
-title                    : "Site Title"
+title                    : "pakrym.com"
 title_separator          : "-"
-name                     : "Your Name"
-description              : "An amazing website."
+name                     : "Pavel Krymets"
+description              : "fifth blog"
 url                      : # the base hostname & protocol for your site e.g. "https://mmistakes.github.io"
 baseurl                  : # the subpath of your site, e.g. "/blog"
 gh_repo                  :
@@ -37,7 +37,7 @@ yandex_site_verification :
 
 # Social Sharing
 twitter:
-  username               :
+  username               : pakrym
 facebook:
   username               :
   app_id                 :
@@ -63,11 +63,11 @@ google_ad_slot           :
 
 # Site Author
 author:
-  name             : "Your Name"
+  name             : "Pavel Krymets"
   avatar           : "bio-photo.jpg"
-  bio              : "I am an amazing person."
-  location         : "Somewhere"
-  email            :
+  bio              : "Developer at ASP.NET team"
+  location         : "Redmond, WA"
+  email            : pavel@krymets.com
   uri              :
   bitbucket        :
   codepen          :
@@ -75,7 +75,7 @@ author:
   flickr           :
   facebook         :
   foursquare       :
-  github           :
+  github           : pakrym
   google_plus      :
   keybase          :
   instagram        :
@@ -83,7 +83,7 @@ author:
   linkedin         :
   pinterest        :
   soundcloud       :
-  stackoverflow    : # http://stackoverflow.com/users/123456/username
+  stackoverflow    : 1069051/pavel-krymets
   steam            :
   tumblr           :
   twitter          :
@@ -206,3 +206,16 @@ compress_html:
   clippings: all
   ignore:
     envs: development
+
+defaults:
+  # _posts
+  - scope:
+      path: ""
+      type: posts
+    values:
+      layout: single
+      author_profile: true
+      read_time: true
+      comments: true
+      share: true
+      related: true

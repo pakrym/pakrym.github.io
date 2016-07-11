@@ -129,6 +129,12 @@ PLATFORMS
 
 DEPENDENCIES
   github-pages
+  jekyll
+  jekyll-feed
+  jekyll-gist
+  jekyll-paginate
+  jekyll-sitemap
+  jemoji
   wdm (~> 0.1.0)
 
 BUNDLED WITH
