@@ -2,6 +2,8 @@
 title: ASP.NET Core compatible dependency injection container in 200 lines of code.
 ---
 
+While working on ASP.NET Core dependency injection implementation I decided to write my own implemenation to find out details of specification requirements, surprisingly it came out quite small and simple.
+
 # Setup
 
 To start we need two projects - one for container implentation and one for tests. Implementaion would target `netstandard1.1` as it has all the things we need, and reference single dependency `Microsoft.Extensions.DependencyInjection.Abstractions` which is set of abstraction ASP.NET Core us you to implement.
@@ -86,6 +88,8 @@ namespace SimpleDI.Tests
 ```
 Run `dotnet test`.
 
+[Commit on Github](https://github.com/pakrym/di200loc/commit/c601e3fb335cc5777ee2c3bcc493061023dd52f9)
+
 **Passed: 0/45**
 
 # Trivial case
@@ -110,11 +114,11 @@ namespace SimpleDI
 {
     public class ServiceProvider : IServiceProvider
     {
-        private readonly IList<ServiceDescriptor> _services;
+        private readonly ServiceDescriptor[] _services;
 
-        public ServiceProvider(IList<ServiceDescriptor> services)
+        public ServiceProvider(IEnumerable<ServiceDescriptor> services)
         {
-            _services = services;
+            _services = services.ToArray();
         }
 
         public object GetService(Type serviceType)
@@ -161,6 +165,9 @@ namespace SimpleDI.Tests
 ```
 After running `dotnet test` you'll see that even this implementation passes lots of tests.
 
+
+[Commit on Github](https://github.com/pakrym/di200loc/commit/f7363872f0a6017b8d49600784c83f73965cb4ce)
+
 **Passed: 18/45**
 
 ## Constructor
@@ -168,39 +175,41 @@ After running `dotnet test` you'll see that even this implementation passes lots
 Lots of the test fail with `No parameterless constructor defined for this object.` on `Activator.CreateInstance` line because service implementation type has constructor with parametes. Specification requires us to use constructor with most parameters if all of them can be satisfied. Lets write the code:
 
 ```
-        private object CreateInstance(Type implementationType)
+private object CreateInstance(Type implementationType)
+{
+    var constructors = implementationType.GetTypeInfo().
+        DeclaredConstructors.OrderByDescending(c => c.GetParameters().Length);
+
+    foreach (var constructorInfo in constructors)
+    {
+        var parameters = constructorInfo.GetParameters();
+        var arguments = new List<object>();
+
+        foreach (var parameterInfo in parameters)
         {
-            var consctructors = implementationType.GetTypeInfo().DeclaredConstructors.OrderByDescending(c => c.GetParameters().Length);
-            List<object> arguments = new List<object>();
-
-            foreach (var constructorInfo in consctructors)
+            var value = GetService(parameterInfo.ParameterType);
+            // Could not resolve parameter
+            if (value == null)
             {
-                var parameters = constructorInfo.GetParameters();
-                arguments.Clear();
-
-                foreach (var parameterInfo in parameters)
-                {
-                    var value = GetService(parameterInfo.ParameterType);
-                    // Could not resolve parameter
-                    if (value == null)
-                    {
-                        break;
-                    }
-                    arguments.Add(value);
-                }
-
-                if (parameters.Length != arguments.Count)
-                {
-                    continue;
-                }
-                // We got values for all paramters
-                return Activator.CreateInstance(implementationType, arguments.ToArray());
+                break;
             }
-            throw new InvalidOperationException("Cannot find constructor");
+            arguments.Add(value);
         }
+
+        if (parameters.Length != arguments.Count)
+        {
+            continue;
+        }
+        // We got values for all paramters
+        return Activator.CreateInstance(implementationType, arguments.ToArray());
+    }
+    throw new InvalidOperationException("Cannot find constructor");
+}
 ```
 
 And replace `Activator.CreateInstance` call with `CreateInstance` call in `GetService`.
+
+[Commit on Github](https://github.com/pakrym/di200loc/commit/3dfe97d094721d2819805eda9b0ef51e30b91d4f)
 
 **Passed: 24/45**
 
@@ -225,6 +234,7 @@ public interface IServiceScope : IDisposable
     IServiceProvider ServiceProvider { get; }
 }
 ```
+
 So service scope is a service provider that guarantess that all services created using it would be disposed with scope being disposed.
 
 After implementing lifetime support service provider implementation grew quite a bit:
@@ -235,14 +245,14 @@ public class ServiceProvider : IServiceProvider, IServiceScopeFactory, IDisposab
     private readonly Dictionary<Type, object> _scoped = new Dictionary<Type, object>();
     private readonly List<object> _transient = new List<object>();
 
-    private readonly IList<ServiceDescriptor> _services;
+    private readonly ServiceDescriptor[] _services;
     private readonly ServiceProvider _root;
 
-    private bool disposed;
+    private bool _disposed;
 
-    public ServiceProvider(IList<ServiceDescriptor> services)
+    public ServiceProvider(IEnumerable<ServiceDescriptor> services)
     {
-        _services = services;
+        _services = services.ToArray();
         _root = this;
     }
 
@@ -324,9 +334,9 @@ public class ServiceProvider : IServiceProvider, IServiceScopeFactory, IDisposab
 
     public void Dispose()
     {
-        if (!disposed)
+        if (!_disposed)
         {
-            disposed = true;
+            _disposed = true;
             foreach (var o in _transient.Concat(_scoped.Values))
             {
                 (o as IDisposable)?.Dispose();
@@ -341,13 +351,13 @@ public class ServiceProvider : IServiceProvider, IServiceScopeFactory, IDisposab
 
     private object CreateInstance(Type implementationType)
     {
-        var consctructors = implementationType.GetTypeInfo().DeclaredConstructors.OrderByDescending(c => c.GetParameters().Length);
-        List<object> arguments = new List<object>();
+        var constructors = implementationType.GetTypeInfo().
+            DeclaredConstructors.OrderByDescending(c => c.GetParameters().Length);
 
-        foreach (var constructorInfo in consctructors)
+        foreach (var constructorInfo in constructors)
         {
             var parameters = constructorInfo.GetParameters();
-            arguments.Clear();
+            var arguments = new List<object>();
 
             foreach (var parameterInfo in parameters)
             {
@@ -370,6 +380,7 @@ public class ServiceProvider : IServiceProvider, IServiceScopeFactory, IDisposab
         throw new InvalidOperationException("Cannot find constructor");
     }
 }
+
 ```
 
 Three field were added `_scoped` to cache scoped services, `_transient` to keep track of objects that were created by container and need to be disposed with it and `_root` to keep track of root container when creating child ones.
@@ -394,7 +405,9 @@ internal class ServiceScope : IServiceScope
     }
 }
 
-And `Dispose` method to dispose of all objects owned by service provider.s
+And `Dispose` method to dispose of all objects owned by service provider.
+
+[Commit on Github](https://github.com/pakrym/di200loc/commit/3da8c1387be92c303b9195f46442dd47ea7090d2)
 
 ```
 **Passed: 36/45**
@@ -404,168 +417,70 @@ And `Dispose` method to dispose of all objects owned by service provider.s
 ASP.NET Core requires a feature called "open generics" to be supported by service providers, this means that if services is registered as `IService<T>` with implementation type `Service<T>` request for `IService<Foo>` would return `Service<Foo>` instance.
 
 ```
-
-    public class ServiceProvider : IServiceProvider, IServiceScopeFactory, IDisposable
+public object GetService(Type serviceType)
+{
+    if (serviceType == typeof(IServiceScopeFactory))
     {
-        private readonly Dictionary<Type, object> _scoped = new Dictionary<Type, object>();
-        private readonly List<object> _transient = new List<object>();
-
-        private readonly IList<ServiceDescriptor> _services;
-        private readonly ServiceProvider _root;
-
-        private bool disposed;
-
-        public ServiceProvider(IList<ServiceDescriptor> services)
-        {
-            _services = services;
-            _root = this;
-        }
-
-        public ServiceProvider(ServiceProvider parent)
-        {
-            _services = parent._services;
-            _root = parent._root;
-        }
-
-        public object GetService(Type serviceType)
-        {
-            if (serviceType == typeof(IServiceScopeFactory))
-            {
-                return this;
-            }
-
-            var descriptor = _services.FirstOrDefault(service => service.ServiceType == serviceType);
-            if (descriptor == null)
-            {
-                if (serviceType.IsConstructedGenericType)
-                {
-                    var genericType = serviceType.GetGenericTypeDefinition();
-                    descriptor = _services.FirstOrDefault(service => service.ServiceType == genericType);
-                    if (descriptor != null)
-                    {
-                        return Resolve(descriptor, serviceType, serviceType.GenericTypeArguments);
-                    }
-                }
-                return null;
-            }
-            return Resolve(descriptor, serviceType, null);
-        }
-
-        private object Resolve(ServiceDescriptor descriptor, Type serviceType, Type[] typeArguments)
-        {
-            switch (descriptor.Lifetime)
-            {
-                case ServiceLifetime.Singleton:
-                    return Singleton(serviceType, () => Create(descriptor, typeArguments));
-                case ServiceLifetime.Scoped:
-                    return Scoped(serviceType, () => Create(descriptor, typeArguments));
-                case ServiceLifetime.Transient:
-                    return Transient(Create(descriptor, typeArguments));
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-
-        private object Transient(object o)
-        {
-            _transient.Add(o);
-            return o;
-        }
-
-        private object Singleton(Type type, Func<object> factory)
-        {
-            return Scoped(type, factory, _root);
-        }
-
-        private object Scoped(Type type, Func<object> factory)
-        {
-            return Scoped(type, factory, this);
-        }
-
-        private static object Scoped(Type type, Func<object> factory, ServiceProvider provider)
-        {
-            object value;
-            if (!provider._scoped.TryGetValue(type, out value))
-            {
-                value = factory();
-                provider._scoped.Add(type, value);
-            }
-            return value;
-        }
-
-        private object Create(ServiceDescriptor descriptor, Type[] typeArguments)
-        {
-            if (descriptor.ImplementationInstance != null)
-            {
-                return descriptor.ImplementationInstance;
-            }
-            else if (descriptor.ImplementationFactory != null)
-            {
-                return descriptor.ImplementationFactory(this);
-            }
-            else if (descriptor.ImplementationType != null)
-            {
-                return CreateInstance(descriptor.ImplementationType, typeArguments);
-            }
-            // we should never get here
-            throw new NotImplementedException();
-        }
-
-        public void Dispose()
-        {
-            if (!disposed)
-            {
-                disposed = true;
-                foreach (var o in _transient.Concat(_scoped.Values))
-                {
-                    (o as IDisposable)?.Dispose();
-                }
-            }
-        }
-
-        public IServiceScope CreateScope()
-        {
-            return new ServiceScope(new ServiceProvider(this));
-        }
-
-        private object CreateInstance(Type implementationType, Type[] typeArguments)
-        {
-            if (typeArguments != null)
-            {
-                implementationType = implementationType.MakeGenericType(typeArguments);
-            }
-            var consctructors = implementationType.GetTypeInfo().DeclaredConstructors.OrderByDescending(c => c.GetParameters().Length);
-            List<object> arguments = new List<object>();
-
-            foreach (var constructorInfo in consctructors)
-            {
-                var parameters = constructorInfo.GetParameters();
-                arguments.Clear();
-
-                foreach (var parameterInfo in parameters)
-                {
-                    var value = GetService(parameterInfo.ParameterType);
-                    // Could not resolve parameter
-                    if (value == null)
-                    {
-                        break;
-                    }
-                    arguments.Add(value);
-                }
-
-                if (parameters.Length != arguments.Count)
-                {
-                    continue;
-                }
-                // We got values for all paramters
-                return Activator.CreateInstance(implementationType, arguments.ToArray());
-            }
-            throw new InvalidOperationException("Cannot find constructor");
-        }
+        return this;
     }
+
+    var descriptor = _services.FirstOrDefault(service => service.ServiceType == serviceType);
+    if (descriptor == null)
+    {
+        if (serviceType.IsConstructedGenericType)
+        {
+            var genericType = serviceType.GetGenericTypeDefinition();
+            descriptor = _services.FirstOrDefault(service => service.ServiceType == genericType);
+            if (descriptor != null)
+            {
+                return Resolve(descriptor, serviceType, serviceType.GenericTypeArguments);
+            }
+        }
+        return null;
+    }
+    return Resolve(descriptor, serviceType, null);
+}
+
+private object CreateInstance(Type implementationType, Type[] typeArguments)
+{
+    if (typeArguments != null)
+    {
+        implementationType = implementationType.MakeGenericType(typeArguments);
+    }
+    var constructors = implementationType.GetTypeInfo()
+        .DeclaredConstructors.OrderByDescending(c => c.GetParameters().Length);
+    foreach (var constructorInfo in constructors)
+    {
+        var parameters = constructorInfo.GetParameters();
+        var arguments = new List<object>();
+
+        foreach (var parameterInfo in parameters)
+        {
+            var value = GetService(parameterInfo.ParameterType);
+            // Could not resolve parameter
+            if (value == null)
+            {
+                break;
+            }
+            arguments.Add(value);
+        }
+
+        if (parameters.Length != arguments.Count)
+        {
+            continue;
+        }
+        // We got values for all paramters
+        return Activator.CreateInstance(implementationType, arguments.ToArray());
+    }
+    throw new InvalidOperationException("Cannot find constructor");
+}
 ```
 
 We added a code to deconstruct generic type and check if there is service registered with closed generic type `ISerivce<>` if it's found we construct an instance using requested type arguments.
+
+[Commit on Github](https://github.com/pakrym/di200loc/commit/e700679521b36547357cbaca8f9fec030a562145)
+
+**Passed: 37/45**
 
 # Open IEnumerable
 When `IEnumberable<T>` is requested provider should return enumeration containing resolved instances for all registered services with type T.
@@ -589,7 +504,7 @@ public object GetService(Type serviceType)
             if (genericType == typeof(IEnumerable<>))
             {
                 var genericAgument = serviceType.GenericTypeArguments[0];
-                var descriptors = _services.Where(s => s.ServiceType == genericAgument).ToList();
+                var descriptors = _services.Where(service => service.ServiceType == genericAgument).ToList();
                 var array = Array.CreateInstance(genericAgument, descriptors.Count());
                 for (int i = 0; i < array.Length; i++)
                 {
@@ -610,6 +525,8 @@ public object GetService(Type serviceType)
 }
 ```
 
+[Commit on Github](https://github.com/pakrym/di200loc/commit/fea5759d7a7aee85610cead83a6544b2efd56ea1)
+
 **Passed: 42/45**
 
 # Final fixes
@@ -623,13 +540,15 @@ if (serviceType == typeof(IServiceProvider) ||
 }
 ```
 
-And last failure is caused because we are selecting first `ServiceDescriptor` in line `var descriptor = _services.FirstOrDefault(service => service.ServiceType == serviceType);` and specification requires that services registered later override ones registered earlier. Thats an easy fix `FirstOrDefault` -> `LastOrDefault`.
+And last failure is caused by selecting first `ServiceDescriptor` in line `var descriptor = _services.FirstOrDefault(service => service.ServiceType == serviceType);` instead on last one as specification requires: services registered later override ones registered earlier. Thats an easy fix `FirstOrDefault` -> `LastOrDefault`.
+
+[Commit on Github](https://github.com/pakrym/di200loc/commit/979ae8b01f52b19f61eb5130c535445398735d6b)
 
 **Passed: 45/45**
 
 # Web application
 
-It's time to use our newly written service provider in actual web application. For this lets create Web Application project in Visual Studio and change `ConfigureServices` to:
+It's time to use our newly written service provider in actual web application. Lets create Web Application project in Visual Studio and change `ConfigureServices` to return our service provider implementation.
 
 ```
 public IServiceProvider ConfigureServices(IServiceCollection services)
@@ -644,3 +563,14 @@ public IServiceProvider ConfigureServices(IServiceCollection services)
 
 Start the application!
 If everything was done right you will see ASP.NET Core MVC application running and fully functional in your browser.
+
+[Commit on Github](https://github.com/pakrym/di200loc/commit/ba53370af7db9083327fb1dc20651c684e28b953)
+
+# Notes
+My goal was to write a dependency injection implementation that passes ASP.NET Core tests and is simple to understand, it's far from being complete, bug-free, performant or reliable.
+
+Some issues with this implementation:
+
+ 1. Not thread safe
+ 2. If multiple scoped services are requested as IEnumerable<T> first of them would be cached and returned each time.
+ 3. Insane ammount of reflection and LINQ which makes it very slow.
