@@ -27,7 +27,7 @@ To start we need two projects - one for container implentation and one for tests
 ```
 We'll need a source file that will contain stub implementation:
 
-```
+``` csharp
 using System;
 
 namespace SimpleDI
@@ -71,7 +71,7 @@ For testing lets create typical `dotnet cli` test project and reference `Microso
 ```
 And in last step lets add a stub test class, inheriting `DependencyInjectionSpecificationTests` and overriding container creation delegate.
 
-```
+``` csharp
 using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Specification;
@@ -104,7 +104,7 @@ You'll notice that container creation delegate receives `IServiceCollection` int
 
 So to implement trivial case we would need to store the descriptor list and use it to return an instance from `GetService` method:
 
-```
+``` csharp
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -149,7 +149,7 @@ namespace SimpleDI
 ```
 Changing test code to pass `IServiceCollection` to `ServiceProvider` constructor:
 
-```
+``` csharp
 using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Specification;
@@ -174,7 +174,7 @@ After running `dotnet test` you'll see that even this implementation passes lots
 
 Lots of the test fail with `No parameterless constructor defined for this object.` on `Activator.CreateInstance` line because service implementation type has constructor with parametes. Specification requires us to use constructor with most parameters if all of them can be satisfied. Lets write the code:
 
-```
+``` csharp
 private object CreateInstance(Type implementationType)
 {
     var constructors = implementationType.GetTypeInfo().
@@ -223,7 +223,7 @@ There are three kinds of service ligetimes in ASP.NET Core:
 
 To describe a notion of scopes we need to look at `IServiceScopeFactory` and `IServiceScope` interfaces:
 
-```
+``` csharp
 public interface IServiceScopeFactory
 {
     IServiceScope CreateScope();
@@ -237,9 +237,9 @@ public interface IServiceScope : IDisposable
 
 So service scope is a service provider that guarantess that all services created using it would be disposed with scope being disposed.
 
-After implementing lifetime support service provider implementation grew quite a bit:
+After implementing lifetime support service provider class grew quite a bit:
 
-```
+``` csharp
 public class ServiceProvider : IServiceProvider, IServiceScopeFactory, IDisposable
 {
     private readonly Dictionary<Type, object> _scoped = new Dictionary<Type, object>();
@@ -387,7 +387,7 @@ Three field were added `_scoped` to cache scoped services, `_transient` to keep 
 
 Singleton lifetime is implemented as scoped always using `_root` as a scope. Also `IServiceScopeFactory` interface was implemented to returne new instances of `ServiceScope` class containig new `ServiceProvider` object that inherits list of services from current but not cached services.
 
-```
+``` csharp
 internal class ServiceScope : IServiceScope
 {
     private ServiceProvider _serviceProvider;
@@ -416,7 +416,7 @@ And `Dispose` method to dispose of all objects owned by service provider.
 
 ASP.NET Core requires a feature called "open generics" to be supported by service providers, this means that if services is registered as `IService<T>` with implementation type `Service<T>` request for `IService<Foo>` would return `Service<Foo>` instance.
 
-```
+``` csharp
 public object GetService(Type serviceType)
 {
     if (serviceType == typeof(IServiceScopeFactory))
@@ -487,7 +487,7 @@ When `IEnumberable<T>` is requested provider should return enumeration containin
 
 To implement this, lets change `GetService` method to this:
 
-```
+``` csharp
 public object GetService(Type serviceType)
 {
     if (serviceType == typeof(IServiceScopeFactory))
@@ -532,7 +532,7 @@ public object GetService(Type serviceType)
 # Final fixes
 Two of last three tests are failing because service provider should be able to return itself when `IServiceProvider` type is requested so changing first `if` in `GetService` method fixes them:
 
-```
+``` csharp
 if (serviceType == typeof(IServiceProvider) ||
     serviceType == typeof(IServiceScopeFactory))
 {
@@ -550,7 +550,7 @@ And last failure is caused by selecting first `ServiceDescriptor` in line `var d
 
 It's time to use our newly written service provider in actual web application. Lets create Web Application project in Visual Studio and change `ConfigureServices` to return our service provider implementation.
 
-```
+``` csharp
 public IServiceProvider ConfigureServices(IServiceCollection services)
 {
     // Add framework services.
