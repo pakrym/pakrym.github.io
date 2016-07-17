@@ -578,4 +578,4 @@ Some of the issues with this implementation:
  1. Not thread safe
  2. If multiple scoped services are requested as IEnumerable<T> first of them would be cached and returned each time.
  3. Instances of services would be created and discarded in constructor selection process.
- 4. Insane ammount of reflection and LINQ which makes it very slow.
+ 4. Insane ammount of reflection and LINQ makes it very slow.
