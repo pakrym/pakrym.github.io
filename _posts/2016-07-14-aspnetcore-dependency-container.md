@@ -2,11 +2,11 @@
 title: ASP.NET Core compatible dependency injection container in 200 lines of code.
 ---
 
-While working on ASP.NET Core dependency injection implementation I decided to write my own implemenation to find out details of specification requirements, surprisingly it came out quite small and simple.
+While working on ASP.NET Core dependency injection implementation I decided to write my own implementation to find out details of specification requirements, surprisingly it came out quite small and simple. In this article I'll describe how to write one step by step.
 
 # Setup
 
-To start we need two projects - one for container implentation and one for tests. Implementaion would target `netstandard1.1` as it has all the things we need, and reference single dependency `Microsoft.Extensions.DependencyInjection.Abstractions` which is set of abstraction ASP.NET Core us you to implement.
+To start we need two projects - one for container implementation and one for tests. Implementation project would target as low as `netstandard1.1` as it has all the things we need, and reference single dependency `Microsoft.Extensions.DependencyInjection.Abstractions` which is set of abstraction for ASP.NET Core compatible dependency injection containers.
 
 ```
 {
@@ -69,7 +69,7 @@ For testing lets create typical `dotnet cli` test project and reference `Microso
   "testRunner": "xunit"
 }
 ```
-And in last step lets add a stub test class, inheriting `DependencyInjectionSpecificationTests` and overriding container creation delegate.
+And in last step lets add a stub test class, inheriting `DependencyInjectionSpecificationTests` and overriding container creation delegate. This will allow us to run specification tests against our implementation.
 
 ``` csharp
 using System;
@@ -94,12 +94,12 @@ Run `dotnet test`.
 
 # Trivial case
 
-You'll notice that container creation delegate receives `IServiceCollection` interface instance, which by itself is `IList<ServiceDescriptor>`. ServiceDescriptor contains information about a registered service:
+You'll notice that container creation delegate receives `IServiceCollection` interface instance, which by itself is `IList<ServiceDescriptor>`. `ServiceDescriptor` contains information about a registered service:
 
- 1. ImplementationFactory - if instance of service is created using factory this property would contain factory delegate.
- 2. ImplementationInstance - if service is represented by a know instance this property will contain it.
- 3. ImplementationType - if instance of service is created by constructing type this property would contain type reference.
- 4. ServiceType - type reference of a service being registered.
+ 1. ImplementationFactory - if instance of a service is created using factory this property would contain the factory delegate.
+ 2. ImplementationInstance - if a service is represented by a know instance this property will contain it.
+ 3. ImplementationType - if instance of a service is created by constructing a type this property would contain the type reference.
+ 4. ServiceType - a type reference of a service being registered.
  5. Lifetime - we'll discuss later.
 
 So to implement trivial case we would need to store the descriptor list and use it to return an instance from `GetService` method:
@@ -146,8 +146,11 @@ namespace SimpleDI
         }
     }
 }
+
 ```
-Changing test code to pass `IServiceCollection` to `ServiceProvider` constructor:
+Calling `services.ToArray();` in constructor is required to protect from outside changes of the service collection which should not affect already created instances.
+
+Test class needs to be changed to pass `IServiceCollection` to `ServiceProvider` constructor:
 
 ``` csharp
 using System;
@@ -163,8 +166,8 @@ namespace SimpleDI.Tests
     }
 }
 ```
-After running `dotnet test` you'll see that even this implementation passes lots of tests.
 
+After running `dotnet test` you'll see that even this implementation passes quite a bit of tests.
 
 [Commit on Github](https://github.com/pakrym/di200loc/commit/f7363872f0a6017b8d49600784c83f73965cb4ce)
 
@@ -172,7 +175,7 @@ After running `dotnet test` you'll see that even this implementation passes lots
 
 ## Constructor
 
-Lots of the test fail with `No parameterless constructor defined for this object.` on `Activator.CreateInstance` line because service implementation type has constructor with parametes. Specification requires us to use constructor with most parameters if all of them can be satisfied. Lets write the code:
+Many of the tests fail with `No parameterless constructor defined for this object.` on `Activator.CreateInstance` line because a service implementation type has constructor with parametes and constructor injection is a required feature. Specification requires us to use constructor with most parameters if all of them can be satisfied.
 
 ``` csharp
 private object CreateInstance(Type implementationType)
@@ -215,10 +218,10 @@ And replace `Activator.CreateInstance` call with `CreateInstance` call in `GetSe
 
 ## Lifetime
 
-There are three kinds of service ligetimes in ASP.NET Core:
+There are three kinds of service lifetimes in ASP.NET Core:
 
- 1. Transient - new instance is created per request
- 2. Singleton - single instance is created and cached for whole container hierarchy
+ 1. Transient - new instance is created per request.
+ 2. Singleton - single instance is created and cached for whole container hierarchy.
  3. Scoped - instance is cached in `IServiceProvider` it was created in.
 
 To describe a notion of scopes we need to look at `IServiceScopeFactory` and `IServiceScope` interfaces:
@@ -235,7 +238,8 @@ public interface IServiceScope : IDisposable
 }
 ```
 
-So service scope is a service provider that guarantess that all services created using it would be disposed with scope being disposed.
+Dependency injection container needs to be able to provider `IServiceScopeFactory` implementation which clients would use to create scopes.
+Service scope is just a service provider that guarantees that all services created using it would be disposed with scope being disposed.
 
 After implementing lifetime support service provider class grew quite a bit:
 
@@ -383,9 +387,9 @@ public class ServiceProvider : IServiceProvider, IServiceScopeFactory, IDisposab
 
 ```
 
-Three field were added `_scoped` to cache scoped services, `_transient` to keep track of objects that were created by container and need to be disposed with it and `_root` to keep track of root container when creating child ones.
+Three field were added `_scoped` to cache scoped services, `_transient` to keep track of objects that were created by container and need to be disposed later and `_root` to keep track of root container used to cache singleton services.
 
-Singleton lifetime is implemented as scoped always using `_root` as a scope. Also `IServiceScopeFactory` interface was implemented to returne new instances of `ServiceScope` class containig new `ServiceProvider` object that inherits list of services from current but not cached services.
+Singleton lifetime is implemented as scoped always using `_root` as a scope. Also `IServiceScopeFactory` interface was implemented to return a new instances of `ServiceScope` class containig new `ServiceProvider` object that inherits list of services from current but not cached services.
 
 ``` csharp
 internal class ServiceScope : IServiceScope
@@ -405,7 +409,7 @@ internal class ServiceScope : IServiceScope
     }
 }
 
-And `Dispose` method to dispose of all objects owned by service provider.
+`ServiceProvider.Dispose` disposes all objects owned by service provider.
 
 [Commit on Github](https://github.com/pakrym/di200loc/commit/3da8c1387be92c303b9195f46442dd47ea7090d2)
 
@@ -414,7 +418,7 @@ And `Dispose` method to dispose of all objects owned by service provider.
 
 # Open generics
 
-ASP.NET Core requires a feature called "open generics" to be supported by service providers, this means that if services is registered as `IService<T>` with implementation type `Service<T>` request for `IService<Foo>` would return `Service<Foo>` instance.
+ASP.NET Core requires a feature called "open generics" to be supported by a service providers, this means that if a services is registered as `IService<>` with implementation type `Service<>` a request for `IService<Foo>` would return `Service<Foo>` instance.
 
 ``` csharp
 public object GetService(Type serviceType)
@@ -476,16 +480,16 @@ private object CreateInstance(Type implementationType, Type[] typeArguments)
 }
 ```
 
-We added a code to deconstruct generic type and check if there is service registered with closed generic type `ISerivce<>` if it's found we construct an instance using requested type arguments.
+We added a code to deconstruct generic type and check if there is service registered with closed generic type `ISerivce<>` if it's found we construct an instance taking in account requested generic type arguments.
 
 [Commit on Github](https://github.com/pakrym/di200loc/commit/e700679521b36547357cbaca8f9fec030a562145)
 
 **Passed: 37/45**
 
 # Open IEnumerable
-When `IEnumberable<T>` is requested provider should return enumeration containing resolved instances for all registered services with type T.
+When `IEnumberable<T>` is requested provider should return enumeration containing resolved instances for all registered services with type T or empy `IEnumerable` if there is no services of requested type.
 
-To implement this, lets change `GetService` method to this:
+To implement this feature lets change `GetService` method to this:
 
 ``` csharp
 public object GetService(Type serviceType)
@@ -530,7 +534,7 @@ public object GetService(Type serviceType)
 **Passed: 42/45**
 
 # Final fixes
-Two of last three tests are failing because service provider should be able to return itself when `IServiceProvider` type is requested so changing first `if` in `GetService` method fixes them:
+Two of the last three tests are failing because service provider should be able to return itself when `IServiceProvider` type is requested so fixing first `if` in `GetService` makes them pass:
 
 ``` csharp
 if (serviceType == typeof(IServiceProvider) ||
@@ -540,7 +544,7 @@ if (serviceType == typeof(IServiceProvider) ||
 }
 ```
 
-And last failure is caused by selecting first `ServiceDescriptor` in line `var descriptor = _services.FirstOrDefault(service => service.ServiceType == serviceType);` instead on last one as specification requires: services registered later override ones registered earlier. Thats an easy fix `FirstOrDefault` -> `LastOrDefault`.
+And the last failure is caused by selecting first `ServiceDescriptor` in line `var descriptor = _services.FirstOrDefault(service => service.ServiceType == serviceType);` instead on the last one as specification requires: services registered later override ones registered earlier. Thats an easy fix `FirstOrDefault` -> `LastOrDefault`.
 
 [Commit on Github](https://github.com/pakrym/di200loc/commit/979ae8b01f52b19f61eb5130c535445398735d6b)
 
@@ -548,7 +552,7 @@ And last failure is caused by selecting first `ServiceDescriptor` in line `var d
 
 # Web application
 
-It's time to use our newly written service provider in actual web application. Lets create Web Application project in Visual Studio and change `ConfigureServices` to return our service provider implementation.
+It's time to use our newly written service provider in actual web application. Let's create Web Application project in Visual Studio and change `ConfigureServices` to return our service provider implementation.
 
 ``` csharp
 public IServiceProvider ConfigureServices(IServiceCollection services)
@@ -569,8 +573,9 @@ If everything was done right you will see ASP.NET Core MVC application running a
 # Notes
 My goal was to write a dependency injection implementation that passes ASP.NET Core tests and is simple to understand, it's far from being complete, bug-free, performant or reliable.
 
-Some issues with this implementation:
+Some of the issues with this implementation:
 
  1. Not thread safe
  2. If multiple scoped services are requested as IEnumerable<T> first of them would be cached and returned each time.
- 3. Insane ammount of reflection and LINQ which makes it very slow.
+ 3. Instances of services would be created and discarded in constructor selection process.
+ 4. Insane ammount of reflection and LINQ which makes it very slow.

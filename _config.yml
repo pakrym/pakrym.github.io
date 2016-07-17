@@ -11,9 +11,9 @@ title                    : "pakrym.com"
 title_separator          : "-"
 name                     : "Pavel Krymets"
 description              : "fifth blog"
-url                      : # the base hostname & protocol for your site e.g. "https://mmistakes.github.io"
+url                      : "http://pakrym.com" # the base hostname & protocol for your site e.g. "https://mmistakes.github.io"
 baseurl                  : # the subpath of your site, e.g. "/blog"
-gh_repo                  :
+gh_repo                  : "https://github.com/pakrym/pakrym.github.io"
 teaser                   : # filename of teaser fallback teaser image placed in /images/, .e.g. "500x300.png"
 # breadcrumbs            : false # true, false (default)
 words_per_minute         : 200
@@ -52,9 +52,9 @@ social:
 
 # Analytics
 analytics:
-  provider               : false # false (default), "google", "google-universal", "custom"
+  provider               : "google" # false (default), "google", "google-universal", "custom"
   google:
-    tracking_id          :
+    tracking_id          : "UA-12393095-2"
 
 # Google AdSense
 google_ad_client         :
@@ -65,7 +65,7 @@ google_ad_slot           :
 author:
   name             : "Pavel Krymets"
   avatar           : "bio-photo.jpg"
-  bio              : "Developer at ASP.NET team"
+  bio              : "Developer at ASP.NET Core team"
   location         : "Redmond, WA"
   email            : pavel@krymets.com
   uri              :
