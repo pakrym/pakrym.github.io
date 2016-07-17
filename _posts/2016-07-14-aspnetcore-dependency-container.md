@@ -2,11 +2,11 @@
 title: ASP.NET Core compatible dependency injection container in 200 lines of code.
 ---
 
-While working on ASP.NET Core dependency injection implementation I decided to write my own implementation to find out details of specification requirements, surprisingly it came out quite small and simple. In this article I'll describe how to write one step by step.
+While working on ASP.NET Core dependency injection implementation I've decided to write my own implementation to find out details of specification requirements, surprisingly it came out quite small and simple. In this article I'll describe how to write one step by step.
 
 # Setup
 
-To start we need two projects - one for container implementation and one for tests. Implementation project would target as low as `netstandard1.1` as it has all the things we need, and reference single dependency `Microsoft.Extensions.DependencyInjection.Abstractions` which is set of abstraction for ASP.NET Core compatible dependency injection containers.
+To start we would need two projects - one for the container implementation and one for the tests. Implementation project would target as low as `netstandard1.1` as it has all the things we need, and reference a single dependency `Microsoft.Extensions.DependencyInjection.Abstractions` which is set of abstraction for ASP.NET Core compatible dependency injection containers.
 
 ```
 {
@@ -25,7 +25,7 @@ To start we need two projects - one for container implementation and one for tes
 }
 
 ```
-We'll need a source file that will contain stub implementation:
+We'll need a source file that will contain a stub implementation:
 
 ``` csharp
 using System;
@@ -44,7 +44,7 @@ namespace SimpleDI
 ```
 
 
-For testing lets create typical `dotnet cli` test project and reference `Microsoft.Extensions.DependencyInjection.Specification.Tests` which contains a set of unit test our implementation would be required to pass.
+For the testing purposes lets create a typical `dotnet cli` test project and reference `Microsoft.Extensions.DependencyInjection.Specification.Tests` which contains a set of unit test which our implementation would be required to pass.
 
 ```
 {
@@ -69,7 +69,7 @@ For testing lets create typical `dotnet cli` test project and reference `Microso
   "testRunner": "xunit"
 }
 ```
-And in last step lets add a stub test class, inheriting `DependencyInjectionSpecificationTests` and overriding container creation delegate. This will allow us to run specification tests against our implementation.
+And in the last step lets add a stub test class, inheriting `DependencyInjectionSpecificationTests` and overriding container creation delegate. This will allow us to run specification tests against our implementation.
 
 ``` csharp
 using System;
@@ -94,7 +94,7 @@ Run `dotnet test`.
 
 # Trivial case
 
-You'll notice that container creation delegate receives `IServiceCollection` interface instance, which by itself is `IList<ServiceDescriptor>`. `ServiceDescriptor` contains information about a registered service:
+You'll notice that the container creation delegate receives `IServiceCollection` interface instance, which by itself is `IList<ServiceDescriptor>`. The `ServiceDescriptor` class contains information about a registered service:
 
  1. ImplementationFactory - if instance of a service is created using factory this property would contain the factory delegate.
  2. ImplementationInstance - if a service is represented by a know instance this property will contain it.
@@ -102,7 +102,7 @@ You'll notice that container creation delegate receives `IServiceCollection` int
  4. ServiceType - a type reference of a service being registered.
  5. Lifetime - we'll discuss later.
 
-So to implement trivial case we would need to store the descriptor list and use it to return an instance from `GetService` method:
+So to implement a trivial case we would need to store the descriptor list and use it to return an instance from `GetService` method:
 
 ``` csharp
 using System;
@@ -238,7 +238,7 @@ public interface IServiceScope : IDisposable
 }
 ```
 
-Dependency injection container needs to be able to provider `IServiceScopeFactory` implementation which clients would use to create scopes.
+Dependency injection container needs to be able to provide `IServiceScopeFactory` implementation which clients would use to create scopes.
 Service scope is just a service provider that guarantees that all services created using it would be disposed with scope being disposed.
 
 After implementing lifetime support service provider class grew quite a bit:
@@ -387,9 +387,9 @@ public class ServiceProvider : IServiceProvider, IServiceScopeFactory, IDisposab
 
 ```
 
-Three field were added `_scoped` to cache scoped services, `_transient` to keep track of objects that were created by container and need to be disposed later and `_root` to keep track of root container used to cache singleton services.
+Three field were added: `_scoped` to cache scoped services, `_transient` to keep track of objects that were created by container and need to be disposed later and `_root` to keep track of root container used to cache singleton services.
 
-Singleton lifetime is implemented as scoped always using `_root` as a scope. Also `IServiceScopeFactory` interface was implemented to return a new instances of `ServiceScope` class containig new `ServiceProvider` object that inherits list of services from current but not cached services.
+Singleton lifetime is implemented as scoped always using `_root` as a scope. Also `IServiceScopeFactory` interface was implemented to return a new instances of `ServiceScope` class containig new `ServiceProvider` object that inherits list of services from current but has it's own cache of scoped services.
 
 ``` csharp
 internal class ServiceScope : IServiceScope
@@ -409,7 +409,7 @@ internal class ServiceScope : IServiceScope
     }
 }
 
-`ServiceProvider.Dispose` disposes all objects owned by service provider.
+The `ServiceProvider.Dispose` method disposes all objects owned by service provider and has reentrancy check in case a service injecting `IServiceProvider` would decide to dispose it causing an infinite recursion.
 
 [Commit on Github](https://github.com/pakrym/di200loc/commit/3da8c1387be92c303b9195f46442dd47ea7090d2)
 
@@ -418,7 +418,7 @@ internal class ServiceScope : IServiceScope
 
 # Open generics
 
-ASP.NET Core requires a feature called "open generics" to be supported by a service providers, this means that if a services is registered as `IService<>` with implementation type `Service<>` a request for `IService<Foo>` would return `Service<Foo>` instance.
+ASP.NET Core requires a feature called "open generics" to be supported by service providers, this means that if a services is registered as `IService<>` with implementation type `Service<>` a request for `IService<Foo>` would return `Service<Foo>` instance.
 
 ``` csharp
 public object GetService(Type serviceType)
@@ -480,7 +480,7 @@ private object CreateInstance(Type implementationType, Type[] typeArguments)
 }
 ```
 
-We added a code to deconstruct generic type and check if there is service registered with closed generic type `ISerivce<>` if it's found we construct an instance taking in account requested generic type arguments.
+Code was added to deconstruct generic type and check if there is service registered with closed generic type `ISerivce<>` if it's found we construct an instance taking in account requested generic type arguments.
 
 [Commit on Github](https://github.com/pakrym/di200loc/commit/e700679521b36547357cbaca8f9fec030a562145)
 
@@ -571,7 +571,7 @@ If everything was done right you will see ASP.NET Core MVC application running a
 [Commit on Github](https://github.com/pakrym/di200loc/commit/ba53370af7db9083327fb1dc20651c684e28b953)
 
 # Notes
-My goal was to write a dependency injection implementation that passes ASP.NET Core tests and is simple to understand, it's far from being complete, bug-free, performant or reliable.
+My goal was to write a dependency injection implementation that passes ASP.NET Core tests and is simple to understand at the same time it's far from being complete, bug-free, performant or reliable.
 
 Some of the issues with this implementation:
 
