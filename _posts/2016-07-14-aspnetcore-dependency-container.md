@@ -220,7 +220,7 @@ And replace `Activator.CreateInstance` call with `CreateInstance` call in `GetSe
 
 There are three kinds of service lifetimes in ASP.NET Core:
 
- 1. Transient - new instance is created per request.
+ 1. Transient - new instance is created per service resolution request.
  2. Singleton - single instance is created and cached for whole container hierarchy.
  3. Scoped - instance is cached in `IServiceProvider` it was created in.
 
